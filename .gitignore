@@ -8,6 +8,10 @@ build/
 
 *.yml
 
+# Claude Code files
+.claude/
+.claude/*
+CLAUDE.md
 
 ### STS ###
 .apt_generated
