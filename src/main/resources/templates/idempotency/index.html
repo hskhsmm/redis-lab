@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Idempotency Key 실습</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 10px;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .response-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            min-height: 100px;
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #17a2b8; }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #6c757d;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            color: #495057;
+        }
+        .key-generator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .key-generator input {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← 홈으로 돌아가기</a>
+    
+    <div class="header">
+        <h1>💡 Idempotency Key 실습</h1>
+        <p>Redis SET NX EX를 활용한 중복 요청 방지</p>
+    </div>
+
+    <div class="section">
+        <h3>📋 사용 방법</h3>
+        <ol>
+            <li><strong>멱등성 키</strong>를 생성하거나 입력합니다</li>
+            <li><strong>주문 정보</strong>를 입력합니다</li>
+            <li><strong>주문 생성</strong> 버튼을 클릭합니다</li>
+            <li><strong>같은 키로 다시 요청</strong>하여 중복 방지를 확인합니다</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h3>🔑 멱등성 키</h3>
+        <div class="form-group">
+            <label>Idempotency Key</label>
+            <div class="key-generator">
+                <input type="text" id="idempotencyKey" placeholder="예: user123-order-20250108-001">
+                <button type="button" class="btn btn-secondary" onclick="generateKey()">자동 생성</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>📦 주문 정보</h3>
+        <div class="form-group">
+            <label>상품명</label>
+            <input type="text" id="itemName" placeholder="예: MacBook Pro" value="MacBook Pro">
+        </div>
+        <div class="form-group">
+            <label>수량</label>
+            <input type="number" id="amount" placeholder="예: 2" value="2" min="1">
+        </div>
+        <div class="form-group">
+            <button type="button" class="btn btn-primary" onclick="createOrder()">주문 생성</button>
+            <button type="button" class="btn btn-success" onclick="duplicateOrder()">동일한 키로 다시 요청</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>📄 응답 결과</h3>
+        <div id="response" class="response-box">여기에 응답 결과가 표시됩니다...</div>
+    </div>
+
+    <script>
+        function generateKey() {
+            const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+            const random = Math.random().toString(36).substring(2, 8);
+            document.getElementById('idempotencyKey').value = `user-${random}-${timestamp}`;
+        }
+
+        async function createOrder() {
+            await sendRequest('주문 생성');
+        }
+
+        async function duplicateOrder() {
+            await sendRequest('중복 요청');
+        }
+
+        async function sendRequest(type) {
+            const key = document.getElementById('idempotencyKey').value;
+            const itemName = document.getElementById('itemName').value;
+            const amount = document.getElementById('amount').value;
+
+            if (!key) {
+                showResponse('error', '멱등성 키를 입력해주세요.');
+                return;
+            }
+
+            if (!itemName || !amount) {
+                showResponse('error', '상품명과 수량을 입력해주세요.');
+                return;
+            }
+
+            const requestData = {
+                itemName: itemName,
+                amount: parseInt(amount)
+            };
+
+            showResponse('info', `${type} 요청 중...`);
+
+            try {
+                const response = await fetch('/idem/orders', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Idempotency-Key': key
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const result = await response.json();
+                const status = response.status;
+                
+                showResponse(
+                    response.ok ? 'success' : 'error',
+                    `[${type}] Status: ${status}\n` + JSON.stringify(result, null, 2)
+                );
+
+            } catch (error) {
+                showResponse('error', `요청 실패: ${error.message}`);
+            }
+        }
+
+        function showResponse(type, message) {
+            const responseDiv = document.getElementById('response');
+            responseDiv.className = `response-box ${type}`;
+            responseDiv.textContent = message;
+        }
+
+        // 페이지 로드 시 자동으로 키 생성
+        window.onload = function() {
+            generateKey();
+        };
+    </script>
+</body>
+</html>
