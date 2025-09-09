@@ -206,3 +206,20 @@ public class LeaderboardController {
         return ResponseEntity.ok(
                 ApiResponse.success("주변 사용자 조회 성공", entries));
     }
+    /**
+     * 스코프와 날짜를 기반으로 적절한 리더보드 키를 반환한다.
+     *
+     * @param scope 리더보드 범위 (all, weekly, daily)
+     * @param date 기준 날짜
+     * @return Redis 리더보드 키
+     * @throws IllegalArgumentException 유효하지 않은 스코프인 경우
+     */
+    private String getLeaderboardKey(String scope, LocalDate date) {
+        return switch (scope.toLowerCase()) {
+            case "all" -> keyFactory.getAllTimeKey();
+            case "weekly" -> keyFactory.getWeeklyKey(date);
+            case "daily" -> keyFactory.getDailyKey(date);
+            default -> throw new IllegalArgumentException("유효하지 않은 스코프: " + scope);
+        };
+    }
+}
