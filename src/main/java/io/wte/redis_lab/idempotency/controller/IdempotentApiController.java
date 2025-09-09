@@ -3,10 +3,10 @@ package io.wte.redis_lab.idempotency.controller;
 import io.wte.redis_lab.idempotency.dto.OrderRequest;
 import io.wte.redis_lab.idempotency.dto.OrderResponse;
 import io.wte.redis_lab.idempotency.service.OrderService;
+import io.wte.redis_lab.idempotency.service.IdempotencyService;
 import io.wte.redis_lab.common.dto.ApiResponse;
 import io.wte.redis_lab.common.dto.ErrorResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -17,7 +17,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import java.time.Duration;
 import java.util.Map;
 
 @RestController
@@ -26,10 +25,8 @@ import java.util.Map;
 @Tag(name = "Idempotency API", description = "멱등성 키를 활용한 중복 방지 API")
 public class IdempotentApiController {
 
-    private final StringRedisTemplate redis;
+    private final IdempotencyService idempotencyService;
     private final OrderService orderService;
-
-    private static final Duration TTL = Duration.ofMinutes(10);
 
     @Operation(
             summary = "멱등성 키를 사용한 주문 생성",
@@ -63,25 +60,20 @@ public class IdempotentApiController {
             return ResponseEntity.badRequest()
                     .body(ErrorResponse.validationError("Idempotency-Key header is required"));
         }
-        String redisKey = "idem:" + key;
 
-        // 최초 요청만 통과: SET NX EX (Java: setIfAbsent with TTL)
-        Boolean first = redis.opsForValue().setIfAbsent(redisKey, "PENDING", TTL);
+        IdempotencyService.IdempotencyResult result = idempotencyService.checkAndMarkFirst(key);
 
-        if (Boolean.TRUE.equals(first)) {
-            // 실제 생성 (여기선 메모리 저장만)
+        if (result.isFirstRequest()) {
             Map<String, Object> created = orderService.createNewOrder(key, req.getItemName(), req.getAmount());
             String orderId = (String) created.get("orderId");
 
-            // 결과를 TTL과 함께 저장해 이후 중복 요청에 동일 응답 가능
-            redis.opsForValue().set(redisKey, orderId, TTL);
+            idempotencyService.markCompleted(key, orderId);
 
             OrderResponse orderResponse = new OrderResponse(false, key, orderId, req.getItemName(), req.getAmount());
             return ResponseEntity.status(201)
                     .body(ApiResponse.success("주문이 성공적으로 생성되었습니다.", orderResponse));
         } else {
-            // 중복 요청 → 기존 결과 반환 (처리 중이던 순간엔 약간 지연될 수 있음)
-            String orderId = redis.opsForValue().get(redisKey);
+            String orderId = result.getExistingResult();
             OrderResponse orderResponse = new OrderResponse(true, key, orderId, req.getItemName(), req.getAmount());
             return ResponseEntity.ok(ApiResponse.success("기존 주문 정보를 반환합니다.", orderResponse));
         }
