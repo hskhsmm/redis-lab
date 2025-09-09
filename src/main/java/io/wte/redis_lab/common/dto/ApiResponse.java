@@ -35,7 +35,7 @@ public class ApiResponse<T> {
         return new ApiResponse<>(true, message, null, java.time.LocalDateTime.now().toString());
     }
 
-    public static ApiResponse<Void> error(String message) {
+    public static <T> ApiResponse<T> error(String message) {
         return new ApiResponse<>(false, message, null, java.time.LocalDateTime.now().toString());
     }
 }
