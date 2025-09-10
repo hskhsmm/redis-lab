@@ -132,6 +132,17 @@ public class LeaderboardService {
     }
 
     /**
+     * 리더보드의 총 참가자 수를 조회한다.
+     *
+     * @param key 리더보드 키
+     * @return 총 참가자 수
+     */
+    public long getTotalMembers(String key) {
+        Long count = redisTemplate.opsForZSet().count(key, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
+        return count != null ? count : 0L;
+    }
+
+    /**
      * 사용자 ID와 점수를 담는 레코드
      */
     public record ScoredValue(String userId, Double score) {}

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏆 리더보드 - Redis Lab</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        .scope-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .scope-btn.active {
+            background-color: #007bff;
+            transform: scale(1.05);
+        }
+        .scope-btn:hover {
+            opacity: 0.8;
+            text-decoration: none;
+            color: white;
+        }
+        .stats {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #666;
+        }
+        .leaderboard-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .leaderboard-header {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .leaderboard-table th {
+            background-color: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .leaderboard-table td {
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.2s;
+        }
+        .leaderboard-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        .rank-cell {
+            width: 80px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .rank-1 { color: #ffd700; }
+        .rank-2 { color: #c0c0c0; }
+        .rank-3 { color: #cd7f32; }
+        .user-cell {
+            font-weight: 500;
+            color: #333;
+        }
+        .distance-cell {
+            text-align: right;
+            font-weight: 600;
+            color: #007bff;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #007bff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .refresh-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .refresh-btn:hover {
+            background-color: #218838;
+        }
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            .leaderboard-table {
+                font-size: 0.9em;
+            }
+            .leaderboard-table th,
+            .leaderboard-table td {
+                padding: 10px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← 메인으로 돌아가기</a>
+    
+    <div class="header">
+        <h1>🏆 러닝 리더보드</h1>
+        <p>Redis Sorted Set으로 실시간 랭킹 관리</p>
+    </div>
+
+    <div class="controls">
+        <a th:href="@{/leaderboard/view(scope='all')}" 
+           th:class="${currentScope == 'all'} ? 'scope-btn active' : 'scope-btn'">
+            전체 기록
+        </a>
+        <a th:href="@{/leaderboard/view(scope='weekly')}" 
+           th:class="${currentScope == 'weekly'} ? 'scope-btn active' : 'scope-btn'">
+            주간 랭킹
+        </a>
+        <a th:href="@{/leaderboard/view(scope='daily')}" 
+           th:class="${currentScope == 'daily'} ? 'scope-btn active' : 'scope-btn'">
+            일간 랭킹
+        </a>
+        <button class="refresh-btn" onclick="window.location.reload()">새로고침</button>
+    </div>
+
+    <div class="stats">
+        <span th:text="|총 참가자: ${totalUsers}명|">총 참가자: 0명</span>
+        <span> • 현재 범위: 
+            <span th:if="${currentScope == 'all'}">전체 기록</span>
+            <span th:if="${currentScope == 'weekly'}">주간 랭킹</span>
+            <span th:if="${currentScope == 'daily'}">일간 랭킹</span>
+        </span>
+    </div>
+
+    <div class="leaderboard-container">
+        <div class="leaderboard-header">
+            <h2>🏃‍♂️ TOP 러너들</h2>
+        </div>
+        
+        <div th:if="${#lists.isEmpty(entries)}" class="empty-state">
+            <p>📊 아직 기록이 없습니다</p>
+            <p>러닝 기록을 추가해서 리더보드를 시작해보세요!</p>
+        </div>
+        
+        <table th:if="${!#lists.isEmpty(entries)}" class="leaderboard-table">
+            <thead>
+                <tr>
+                    <th>순위</th>
+                    <th>사용자</th>
+                    <th>거리 (km)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="entry : ${entries}">
+                    <td class="rank-cell" 
+                        th:class="${entry.rank() == 1} ? 'rank-cell rank-1' : 
+                                  ${entry.rank() == 2} ? 'rank-cell rank-2' : 
+                                  ${entry.rank() == 3} ? 'rank-cell rank-3' : 'rank-cell'">
+                        <span th:if="${entry.rank() == 1}">🥇</span>
+                        <span th:if="${entry.rank() == 2}">🥈</span>
+                        <span th:if="${entry.rank() == 3}">🥉</span>
+                        <span th:if="${entry.rank() > 3}" th:text="${entry.rank()}"></span>
+                    </td>
+                    <td class="user-cell">
+                        <span th:text="|사용자 ${entry.userId()}|">사용자 1001</span>
+                    </td>
+                    <td class="distance-cell">
+                        <span th:text="${#numbers.formatDecimal(entry.score(), 1, 1)}">0.0</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // 10초마다 자동 새로고침 (선택사항)
+        // setInterval(() => {
+        //     window.location.reload();
+        // }, 10000);
+    </script>
+</body>
+</html>
