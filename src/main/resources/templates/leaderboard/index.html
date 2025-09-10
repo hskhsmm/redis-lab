@@ -115,17 +115,33 @@
         .back-link:hover {
             text-decoration: underline;
         }
-        .refresh-btn {
-            background-color: #28a745;
+        .refresh-btn, .test-btn, .clear-btn {
             color: white;
             border: none;
             padding: 8px 16px;
             border-radius: 5px;
             cursor: pointer;
             font-size: 0.9em;
+            margin: 2px;
+        }
+        .refresh-btn {
+            background-color: #28a745;
         }
         .refresh-btn:hover {
             background-color: #218838;
+        }
+        .test-btn {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .test-btn:hover {
+            background-color: #e0a800;
+        }
+        .clear-btn {
+            background-color: #dc3545;
+        }
+        .clear-btn:hover {
+            background-color: #c82333;
         }
         @media (max-width: 768px) {
             .controls {
@@ -164,6 +180,8 @@
             일간 랭킹
         </a>
         <button class="refresh-btn" onclick="window.location.reload()">새로고침</button>
+        <button class="test-btn" onclick="generateTestData()">테스트 데이터 생성</button>
+        <button class="clear-btn" onclick="clearData()">데이터 초기화</button>
     </div>
 
     <div class="stats">
@@ -216,6 +234,53 @@
     </div>
 
     <script>
+        // 현재 스코프 가져오기
+        const currentScope = /*[[${currentScope}]]*/ 'weekly';
+        
+        // 테스트 데이터 생성 함수
+        async function generateTestData() {
+            if (!confirm('테스트 데이터 20명을 생성하시겠습니까?')) return;
+            
+            try {
+                const response = await fetch(`/v1/leaderboard/test-data?userCount=20&scope=${currentScope}`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`테스트 데이터 생성 완료!\n생성된 사용자: ${result.data.successCount}명`);
+                    window.location.reload();
+                } else {
+                    alert('데이터 생성 실패: ' + result.message);
+                }
+            } catch (error) {
+                alert('오류 발생: ' + error.message);
+            }
+        }
+        
+        // 데이터 초기화 함수
+        async function clearData() {
+            if (!confirm(`${currentScope} 리더보드의 모든 데이터를 삭제하시겠습니까?`)) return;
+            
+            try {
+                const response = await fetch(`/v1/leaderboard/clear?scope=${currentScope}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('데이터 초기화 완료!');
+                    window.location.reload();
+                } else {
+                    alert('초기화 실패: ' + result.message);
+                }
+            } catch (error) {
+                alert('오류 발생: ' + error.message);
+            }
+        }
+        
         // 10초마다 자동 새로고침 (선택사항)
         // setInterval(() => {
         //     window.location.reload();

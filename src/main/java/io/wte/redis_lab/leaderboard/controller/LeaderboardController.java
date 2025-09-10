@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +35,7 @@ public class LeaderboardController {
 
     private final LeaderboardService leaderboardService;
     private final LeaderboardKeyFactory keyFactory;
+    private final StringRedisTemplate redisTemplate;
 
     // 중복 방지 키의 TTL (7일)
     private static final long DEDUP_TTL_MS = 7L * 24 * 60 * 60 * 1000;
@@ -206,6 +208,87 @@ public class LeaderboardController {
         return ResponseEntity.ok(
                 ApiResponse.success("주변 사용자 조회 성공", entries));
     }
+
+    @Operation(
+            summary = "테스트 데이터 생성",
+            description = "리더보드 테스트를 위한 랜덤 사용자 데이터를 생성합니다."
+    )
+    @PostMapping("/test-data")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> generateTestData(
+            @Parameter(description = "생성할 사용자 수", example = "20")
+            @RequestParam(defaultValue = "20") int userCount,
+            
+            @Parameter(description = "대상 스코프", example = "weekly")
+            @RequestParam(defaultValue = "weekly") String scope) {
+
+        if (userCount <= 0 || userCount > 100) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("사용자 수는 1~100 사이여야 합니다."));
+        }
+
+        LocalDate today = LocalDate.now();
+        String leaderboardKey = getLeaderboardKey(scope, today);
+        
+        Map<String, Object> result = new HashMap<>();
+        int successCount = 0;
+
+        // 랜덤 사용자 데이터 생성
+        for (int i = 1; i <= userCount; i++) {
+            try {
+                String userId = "user" + String.format("%03d", i);
+                // 0.1km ~ 50km 랜덤 거리
+                double distance = Math.round((Math.random() * 49.9 + 0.1) * 10.0) / 10.0;
+                
+                // 고유한 이벤트 ID로 중복 방지 키 생성
+                String eventId = "test-event-" + System.currentTimeMillis() + "-" + i;
+                String dedupKey = keyFactory.getDedupKey(eventId);
+                
+                leaderboardService.addDistanceOnce(
+                    leaderboardKey, dedupKey, userId, distance, DEDUP_TTL_MS);
+                
+                successCount++;
+                
+                // 약간의 딜레이로 타임스탬프 차이 생성
+                Thread.sleep(1);
+                
+            } catch (Exception e) {
+                log.warn("테스트 데이터 생성 실패 - 사용자 {}: {}", i, e.getMessage());
+            }
+        }
+        
+        result.put("requestedUsers", userCount);
+        result.put("successCount", successCount);
+        result.put("scope", scope);
+        result.put("leaderboardKey", leaderboardKey);
+        result.put("totalMembers", leaderboardService.getTotalMembers(leaderboardKey));
+
+        return ResponseEntity.ok(
+                ApiResponse.success("테스트 데이터 생성 완료", result));
+    }
+
+    @Operation(
+            summary = "리더보드 데이터 초기화",
+            description = "지정된 스코프의 리더보드 데이터를 모두 삭제합니다."
+    )
+    @DeleteMapping("/clear")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> clearLeaderboard(
+            @Parameter(description = "초기화할 스코프", example = "weekly")
+            @RequestParam String scope) {
+        
+        LocalDate today = LocalDate.now();
+        String leaderboardKey = getLeaderboardKey(scope, today);
+        
+        Long deletedCount = redisTemplate.delete(leaderboardKey) ? 1L : 0L;
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("scope", scope);
+        result.put("leaderboardKey", leaderboardKey);
+        result.put("cleared", deletedCount > 0);
+        
+        return ResponseEntity.ok(
+                ApiResponse.success("리더보드 초기화 완료", result));
+    }
+
     /**
      * 스코프와 날짜를 기반으로 적절한 리더보드 키를 반환한다.
      *
