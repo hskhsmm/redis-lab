@@ -214,9 +214,9 @@
             <tbody>
                 <tr th:each="entry : ${entries}">
                     <td class="rank-cell" 
-                        th:class="${entry.rank() == 1} ? 'rank-cell rank-1' : 
-                                  ${entry.rank() == 2} ? 'rank-cell rank-2' : 
-                                  ${entry.rank() == 3} ? 'rank-cell rank-3' : 'rank-cell'">
+                        th:class="${entry.rank() == 1 ? 'rank-cell rank-1' : 
+                                  entry.rank() == 2 ? 'rank-cell rank-2' : 
+                                  entry.rank() == 3 ? 'rank-cell rank-3' : 'rank-cell'}">
                         <span th:if="${entry.rank() == 1}">🥇</span>
                         <span th:if="${entry.rank() == 2}">🥈</span>
                         <span th:if="${entry.rank() == 3}">🥉</span>
@@ -226,7 +226,7 @@
                         <span th:text="|사용자 ${entry.userId()}|">사용자 1001</span>
                     </td>
                     <td class="distance-cell">
-                        <span th:text="${#numbers.formatDecimal(entry.score(), 1, 1)}">0.0</span>
+                        <span th:text="${#numbers.formatDecimal(entry.totalDistance(), 1, 1)}">0.0</span>
                     </td>
                 </tr>
             </tbody>

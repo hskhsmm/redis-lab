@@ -239,20 +239,18 @@ public class LeaderboardController {
                 // 0.1km ~ 50km 랜덤 거리
                 double distance = Math.round((Math.random() * 49.9 + 0.1) * 10.0) / 10.0;
                 
-                // 고유한 이벤트 ID로 중복 방지 키 생성
-                String eventId = "test-event-" + System.currentTimeMillis() + "-" + i;
-                String dedupKey = keyFactory.getDedupKey(eventId);
+                log.info("테스트 데이터 생성 시도 - 사용자: {}, 거리: {}", userId, distance);
                 
-                leaderboardService.addDistanceOnce(
-                    leaderboardKey, dedupKey, userId, distance, DEDUP_TTL_MS);
-                
+                // 테스트용이므로 직접 Redis에 추가 (중복 방지 로직 우회)
+                redisTemplate.opsForZSet().add(leaderboardKey, userId, distance + (System.currentTimeMillis() / 1e15));
                 successCount++;
+                log.info("테스트 데이터 생성 완료 - 사용자: {}, 거리: {}", userId, distance);
                 
                 // 약간의 딜레이로 타임스탬프 차이 생성
-                Thread.sleep(1);
+                Thread.sleep(2);
                 
             } catch (Exception e) {
-                log.warn("테스트 데이터 생성 실패 - 사용자 {}: {}", i, e.getMessage());
+                log.warn("테스트 데이터 생성 실패 - 사용자 {}: {}", i, e.getMessage(), e);
             }
         }
         
@@ -278,7 +276,11 @@ public class LeaderboardController {
         LocalDate today = LocalDate.now();
         String leaderboardKey = getLeaderboardKey(scope, today);
         
-        Long deletedCount = redisTemplate.delete(leaderboardKey) ? 1L : 0L;
+        Boolean deleted = redisTemplate.delete(leaderboardKey);
+        Long deletedCount = deleted != null && deleted ? 1L : 0L;
+        
+        // 중복 방지 키들도 모두 정리
+        redisTemplate.delete(redisTemplate.keys("lb:dedup:test-event-*"));
         
         Map<String, Object> result = new HashMap<>();
         result.put("scope", scope);

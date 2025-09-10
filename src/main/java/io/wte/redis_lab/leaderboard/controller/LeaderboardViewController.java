@@ -30,28 +30,39 @@ public class LeaderboardViewController {
             @RequestParam(defaultValue = "10") int limit,
             Model model) {
 
-        if (limit <= 0 || limit > 50) {
-            limit = 10;
+        try {
+            if (limit <= 0 || limit > 50) {
+                limit = 10;
+            }
+
+            String leaderboardKey = getLeaderboardKey(scope, LocalDate.now());
+            List<LeaderboardService.ScoredValue> scoredValues =
+                    leaderboardService.getTopN(leaderboardKey, limit);
+
+            // 순위를 포함하여 응답 생성
+            AtomicLong rankCounter = new AtomicLong(1); // UI에서는 1부터 시작
+            List<LeaderboardEntry> entries = scoredValues.stream()
+                    .map(sv -> new LeaderboardEntry(
+                            rankCounter.getAndIncrement(),
+                            sv.userId(),
+                            sv.score()))
+                    .toList();
+
+            model.addAttribute("entries", entries);
+            model.addAttribute("currentScope", scope);
+            model.addAttribute("totalUsers", leaderboardService.getTotalMembers(leaderboardKey));
+
+            log.info("리더보드 뷰 로드 완료 - 스코프: {}, 엔트리 수: {}, 총 사용자: {}", 
+                    scope, entries.size(), leaderboardService.getTotalMembers(leaderboardKey));
+            
+            return "leaderboard/index";
+        } catch (Exception e) {
+            log.error("리더보드 뷰 로드 중 오류 발생", e);
+            model.addAttribute("entries", List.of());
+            model.addAttribute("currentScope", scope);
+            model.addAttribute("totalUsers", 0L);
+            return "leaderboard/index";
         }
-
-        String leaderboardKey = getLeaderboardKey(scope, LocalDate.now());
-        List<LeaderboardService.ScoredValue> scoredValues =
-                leaderboardService.getTopN(leaderboardKey, limit);
-
-        // 순위를 포함하여 응답 생성
-        AtomicLong rankCounter = new AtomicLong(1); // UI에서는 1부터 시작
-        List<LeaderboardEntry> entries = scoredValues.stream()
-                .map(sv -> new LeaderboardEntry(
-                        rankCounter.getAndIncrement(),
-                        sv.userId(),
-                        sv.score()))
-                .toList();
-
-        model.addAttribute("entries", entries);
-        model.addAttribute("currentScope", scope);
-        model.addAttribute("totalUsers", leaderboardService.getTotalMembers(leaderboardKey));
-
-        return "leaderboard/index";
     }
 
     /**
